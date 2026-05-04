@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Docs — Collaborative Editor</title>
+  <meta name="description"
+    content="Real-time collaborative document editor inspired by Google Docs, with WebSockets, Operational Transform, version history, and conflict resolution." />
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Caveat&family=Courier+Prime&family=EB+Garamond&family=Inter&family=Lora&family=Merriweather&family=Montserrat&family=Nunito&family=Open+Sans&family=Oswald&family=Playfair+Display&family=Poppins&family=Roboto+Mono&family=Roboto:wght@300;400;500;700&family=Source+Code+Pro&family=Ubuntu&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+
+  <div id="connection-banner">
+    ⚠ Connection lost — attempting to reconnect…
+  </div>
+
+  <div id="join-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+      <div class="modal-logo">
+        <div class="modal-logo-icon">📄</div>
+        <h1 id="modal-title">Docs</h1>
+      </div>
+      <p class="modal-tagline">Create, edit, and collaborate on documents in real time. No sign-in required.</p>
+
+      <div class="modal-field">
+        <label for="username-input">Your Name</label>
+        <input type="text" id="username-input" class="modal-input" placeholder="e.g. Alex" maxlength="24"
+          autocomplete="off" />
+      </div>
+
+      <div class="modal-field">
+        <label for="room-input">Document Name</label>
+        <input type="text" id="room-input" class="modal-input" placeholder="e.g. Untitled document" maxlength="32"
+          autocomplete="off" />
+      </div>
+
+      <button id="join-btn" class="join-btn">
+        Open Document
+      </button>
+
+      <div class="modal-badges">
+        <span class="feature-badge">⚡ Real-time sync</span>
+        <span class="feature-badge">👥 Multi-user cursors</span>
+        <span class="feature-badge">📚 Version history</span>
+        <span class="feature-badge">🔄 Conflict resolution</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── App Shell ──────────────────────────────────────── -->
+  <div id="app">
+
+    <!-- Menubar — Google Docs style -->
+    <header id="topbar" role="banner">
+      <div class="topbar-logo">
+        <div class="topbar-logo-icon">📄</div>
+      </div>
+
+      <span id="doc-title">Untitled Document</span>
+
+      <div class="topbar-right">
+        <!-- Status -->
+        <div class="status-badge" title="Connection status">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Connecting…</span>
+          <span id="latency">—</span>
+        </div>
+
+        <!-- Collaborators -->
+        <div class="collaborators-chip" title="Active collaborators">
+          <span>👥</span>
+          <span id="collaborators-count">0</span>
+        </div>
+
+        <!-- Presence badges -->
+        <div id="presence-container" role="list" aria-label="Active collaborators"></div>
+
+        <!-- Actions -->
+        <button class="icon-btn" onclick="toggleVersionPanel()" title="Version history" id="version-toggle-btn">
+          🕘 History
+        </button>
+        <button class="icon-btn" onclick="saveSnapshot()" title="Save version">
+          💾 Save
+        </button>
+        <button class="icon-btn accent" id="share-btn" title="Copy share link">
+          📤 Share
+        </button>
+        <button class="icon-btn" onclick="toggleSystemPanel()" title="System design info">
+          ⚙ System
+        </button>
+      </div>
+    </header>
+
+    <!-- Toolbar — Google Docs style -->
+    <div id="toolbar" role="toolbar" aria-label="Text formatting">
+      <div class="toolbar-group">
+        <select class="tb-select" id="heading-select" onchange="setHeading(this.value)" title="Text style">
+          <option value="p">Normal text</option>
+          <option value="h1">Heading 1</option>
+          <option value="h2">Heading 2</option>
+          <option value="h3">Heading 3</option>
+          <option value="pre">Code</option>
+          <option value="blockquote">Quote</option>
+        </select>
+
+        <select class="tb-select tb-font-select" id="font-select" onchange="setFontFamily(this.value)" title="Font">
+          <option value="Roboto">Roboto</option>
+          <option value="Inter">Inter</option>
+          <option value="Open Sans">Open Sans</option>
+          <option value="Poppins">Poppins</option>
+          <option value="Montserrat">Montserrat</option>
+          <option value="Nunito">Nunito</option>
+          <option value="Ubuntu">Ubuntu</option>
+          <option value="Oswald">Oswald</option>
+          <option value="Lora">Lora</option>
+          <option value="Merriweather">Merriweather</option>
+          <option value="Playfair Display">Playfair Display</option>
+          <option value="EB Garamond">EB Garamond</option>
+          <option value="Caveat">Caveat</option>
+          <option value="Roboto Mono">Roboto Mono</option>
+          <option value="Source Code Pro">Source Code Pro</option>
+          <option value="Courier Prime">Courier Prime</option>
+          <option value="Arial">Arial</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Times New Roman">Times New Roman</option>
+          <option value="Verdana">Verdana</option>
+        </select>
+
+        <select class="tb-select tb-fontsize-select" id="fontsize-select" onchange="setFontSize(this.value)"
+          title="Font size">
+          <option value="1">8</option>
+          <option value="2">10</option>
+          <option value="3" selected>12</option>
+          <option value="4">14</option>
+          <option value="5">18</option>
+          <option value="6">24</option>
+          <option value="7">36</option>
+        </select>
+      </div>
+
+      <div class="toolbar-group">
+        <button class="tb-btn" id="btn-bold" onclick="execFormat('bold')" title="Bold (Ctrl+B)">
+          <strong>B</strong>
+        </button>
+        <button class="tb-btn" id="btn-italic" onclick="execFormat('italic')" title="Italic (Ctrl+I)">
+          <em>I</em>
+        </button>
+        <button class="tb-btn" id="btn-underline" onclick="execFormat('underline')" title="Underline (Ctrl+U)">
+          <u>U</u>
+        </button>
+        <button class="tb-btn" id="btn-strikethrough" onclick="execFormat('strikeThrough')" title="Strikethrough">
+          <s>S</s>
+        </button>
+      </div>
+
+      <!-- Text Color -->
+      <div class="toolbar-group">
+        <div class="tb-color-wrapper" id="text-color-wrapper">
+          <button class="tb-btn tb-color-btn" id="btn-text-color" onclick="toggleColorPicker('text')"
+            title="Text color">
+            <span class="color-btn-label">A</span>
+            <span class="color-btn-bar" id="text-color-bar"></span>
+          </button>
+          <div class="color-picker-dropdown" id="text-color-picker">
+            <div class="color-picker-title">Text color</div>
+            <div class="color-swatches" id="text-swatches"></div>
+            <div class="color-custom-row">
+              <label>Custom:</label>
+              <input type="color" id="text-color-input" value="#000000" onchange="applyTextColor(this.value)" />
+            </div>
+            <button class="color-reset-btn" onclick="resetTextColor()">↺ Reset to default</button>
+          </div>
+        </div>
+
+        <div class="tb-color-wrapper" id="highlight-color-wrapper">
+          <button class="tb-btn tb-color-btn" id="btn-highlight-color" onclick="toggleColorPicker('highlight')"
+            title="Highlight color">
+            <span class="color-btn-label highlight-icon">⬤</span>
+            <span class="color-btn-bar highlight-bar" id="highlight-color-bar"></span>
+          </button>
+          <div class="color-picker-dropdown" id="highlight-color-picker">
+            <div class="color-picker-title">Highlight color</div>
+            <div class="color-swatches" id="highlight-swatches"></div>
+            <div class="color-custom-row">
+              <label>Custom:</label>
+              <input type="color" id="highlight-color-input" value="#FFFF00"
+                onchange="applyHighlightColor(this.value)" />
+            </div>
+            <button class="color-reset-btn" onclick="resetHighlightColor()">↺ Remove highlight</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-group">
+        <button class="tb-btn" onclick="execFormat('insertUnorderedList')" title="Bullet list">• List</button>
+        <button class="tb-btn" onclick="execFormat('insertOrderedList')" title="Numbered list">1. List</button>
+      </div>
+
+      <div class="toolbar-group">
+        <button class="tb-btn" onclick="execFormat('justifyLeft')" title="Align left">≡</button>
+        <button class="tb-btn" onclick="execFormat('justifyCenter')" title="Center">≡</button>
+        <button class="tb-btn" onclick="execFormat('justifyRight')" title="Align right">≡</button>
+      </div>
+
+      <div class="toolbar-group">
+        <button class="tb-btn" onclick="execFormat('undo')" title="Undo (Ctrl+Z)">↩</button>
+        <button class="tb-btn" onclick="execFormat('redo')" title="Redo (Ctrl+Y)">↪</button>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <main id="main" role="main">
+
+      <!-- Editor Column -->
+      <div id="editor-area">
+        <div class="editor-paper">
+          <div id="editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Document editor"
+            spellcheck="true"></div>
+          <div id="cursor-overlay" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <!-- Version History Side Panel -->
+      <aside id="version-panel" aria-label="Version history">
+        <div class="panel-header">
+          <h3>Version history</h3>
+          <button class="panel-close-btn" onclick="toggleVersionPanel()" aria-label="Close version panel">✕</button>
+        </div>
+        <div id="version-list"></div>
+      </aside>
+
+    </main>
+
+    <!-- Status Bar -->
+    <footer class="editor-status-bar" role="contentinfo">
+      <div class="status-bar-left">
+        <span id="word-count">0 words</span>
+        <span id="char-count">0 chars</span>
+      </div>
+      <div class="status-bar-right">
+        <span id="save-indicator"></span>
+        <span style="color: var(--text-muted); font-size: 0.68rem;">Docs • OT Engine v1.0</span>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- ─── System Design Info Panel ───────────────────────── -->
+  <div id="system-panel" role="dialog" aria-label="System design information">
+    <div class="system-panel-inner">
+      <div class="system-panel-title">
+        ⚙ System Design
+      </div>
+
+      <div class="arch-item">
+        <div class="arch-icon blue">⚡</div>
+        <div class="arch-text">
+          <strong>Event-Based Architecture</strong>
+          <small>Node.js EventEmitter bus decouples op handling from broadcasting. Scales to Kafka for horizontal
+            distribution.</small>
+        </div>
+      </div>
+
+      <div class="arch-item">
+        <div class="arch-icon green">🔄</div>
+        <div class="arch-text">
+          <strong>Operational Transform (OT)</strong>
+          <small>Server serializes ops via Mutex. Client queues inflight + pending ops, transforms on ACK/remote-op
+            receipt.</small>
+        </div>
+      </div>
+
+      <div class="arch-item">
+        <div class="arch-icon orange">🔒</div>
+        <div class="arch-text">
+          <strong>Concurrency &amp; Locking</strong>
+          <small>Per-document async Mutex prevents race conditions. Op queue bounded at 1000 entries. Heartbeat cleans
+            dead sockets.</small>
+        </div>
+      </div>
+
+      <div class="arch-item">
+        <div class="arch-icon pink">📐</div>
+        <div class="arch-text">
+          <strong>Horizontal Scaling</strong>
+          <small>Room Manager isolates state per docId. Redis pub/sub or sticky sessions enable multi-node
+            scaling.</small>
+        </div>
+      </div>
+
+      <div class="arch-item">
+        <div class="arch-icon blue">📚</div>
+        <div class="arch-text">
+          <strong>Version History</strong>
+          <small>Snapshot every 20 ops. Manual saves. Server-side restore broadcasts to all clients via
+            WebSocket.</small>
+        </div>
+      </div>
+
+      <div class="arch-item">
+        <div class="arch-icon green">🛡</div>
+        <div class="arch-text">
+          <strong>Conflict Resolution</strong>
+          <small>Tiebreaking by clientId lexicography at same-position inserts. Server is authoritative source of
+            truth.</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Toast Container ────────────────────────────────── -->
+  <div id="toast-container" role="status" aria-live="polite"></div>
+
+  <!-- ─── Scripts ────────────────────────────────────────── -->
+  <script src="ot-client.js"></script>
+  <script src="editor.js"></script>
+
+</body>
+
+</html>

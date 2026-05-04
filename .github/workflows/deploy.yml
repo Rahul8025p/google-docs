@@ -1,0 +1,85 @@
+name: CI / Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── Lint & Validate ──────────────────────────────────────
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax (dry run)
+        run: node -c server.js && node -c ot-engine.js
+
+      - name: Start server & health check
+        run: |
+          node server.js &
+          sleep 3
+          curl -f http://localhost:3001/health || exit 1
+          kill %1
+
+  # ─── Build Docker Image ───────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t collab-editor:${{ github.sha }} .
+
+      - name: Test container health
+        run: |
+          docker run -d --name test-editor -p 3001:3001 collab-editor:${{ github.sha }}
+          sleep 5
+          curl -f http://localhost:3001/health || exit 1
+          docker stop test-editor
+          docker rm test-editor
+
+  # ─── Deploy to Railway (uncomment and set secrets) ────────
+  # deploy-railway:
+  #   name: Deploy to Railway
+  #   runs-on: ubuntu-latest
+  #   needs: [validate, docker]
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Install Railway CLI
+  #       run: npm i -g @railway/cli
+  #     - name: Deploy
+  #       run: railway up
+  #       env:
+  #         RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  # ─── Deploy to Render (auto-deploys on push if connected) ─
+  # Render auto-deploys from GitHub — no workflow step needed.
+  # Just connect your repo at https://render.com/deploy
+
+  # ─── Deploy to Fly.io (uncomment and set secrets) ─────────
+  # deploy-fly:
+  #   name: Deploy to Fly.io
+  #   runs-on: ubuntu-latest
+  #   needs: [validate, docker]
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: superfly/flyctl-actions/setup-flyctl@master
+  #     - run: flyctl deploy --remote-only
+  #       env:
+  #         FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
