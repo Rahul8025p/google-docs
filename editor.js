@@ -232,6 +232,13 @@ function handleInit(msg) {
   renderAllPresence(msg.presence);
   renderVersionHistory(msg.versionHistory || []);
 
+  // Render Instance ID (System Design Showcase)
+  const instanceBadge = document.getElementById('instance-badge');
+  if (instanceBadge && msg.instanceId) {
+    instanceBadge.textContent = `Node ID: ${msg.instanceId}`;
+    instanceBadge.style.display = 'inline-block';
+  }
+
   connectionBanner.classList.remove('show');
   updateCounts();
   showToast(`Joined as ${msg.username}`, 'success');
