@@ -1,0 +1,11 @@
+FROM mongo:latest
+# Install netcat (MongoDB image is based on Ubuntu/Debian, so we use apt)
+RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/lists/*
+# Create a startup script
+RUN echo '#!/bin/sh' > /entrypoint.sh && \
+    echo 'mongod --bind_ip_all &' >> /entrypoint.sh && \
+    echo 'echo "MongoDB started on 27017. Starting fake HTTP server on port $PORT..."' >> /entrypoint.sh && \
+    echo 'while true; do { echo -ne "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"; } | nc -lk -p $PORT; done' >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+EXPOSE 27017
+CMD ["/entrypoint.sh"]
