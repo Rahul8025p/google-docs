@@ -27,10 +27,33 @@ const fs = require('fs');
 const PORT = parseInt(process.env.PORT, 10) || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const INSTANCE_ID = uuidv4().split('-')[0];
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'localhost:9092').split(',');
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const IS_PROD = NODE_ENV === 'production';
+
+// Robust REDIS_URL resolving with automatic fallback
+let REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+if (!REDIS_URL || REDIS_URL === '/' || REDIS_URL.trim() === '') {
+  console.warn('[Redis] Invalid/empty REDIS_URL. Falling back to Render internal host: redis://google-docs-redis:6379');
+  REDIS_URL = 'redis://google-docs-redis:6379';
+} else if (!REDIS_URL.startsWith('redis://') && !REDIS_URL.startsWith('rediss://')) {
+  REDIS_URL = 'redis://' + REDIS_URL;
+}
+
+// Robust KAFKA_BROKERS resolving (supports KAFKA_BROKERS or KAFKA_BROKER)
+let KAFKA_INPUT = process.env.KAFKA_BROKERS || process.env.KAFKA_BROKER || 'localhost:9092';
+if (!KAFKA_INPUT || KAFKA_INPUT === '/' || KAFKA_INPUT.trim() === '') {
+  console.warn('[Kafka] Invalid/empty Kafka address. Falling back to: google-docs-kafka:9092');
+  KAFKA_INPUT = 'google-docs-kafka:9092';
+}
+const KAFKA_BROKERS = KAFKA_INPUT.split(',');
+
+// Robust MONGO_URI resolving (supports MONGODB_URI or MONGO_URI)
+let MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017';
+if (!MONGO_URI || MONGO_URI === '/' || MONGO_URI.trim() === '') {
+  console.warn('[Mongo] Invalid/empty MONGODB_URI. Falling back to Render internal host: mongodb://google-docs-mongo:27017');
+  MONGO_URI = 'mongodb://google-docs-mongo:27017';
+} else if (!MONGO_URI.startsWith('mongodb://') && !MONGO_URI.startsWith('mongodb+srv://')) {
+  MONGO_URI = 'mongodb://' + MONGO_URI;
+}
 
 // ─── Monitoring (Prometheus) ───────────────────────────────────────────────────
 const collectDefaultMetrics = promClient.collectDefaultMetrics;
