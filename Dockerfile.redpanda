@@ -1,0 +1,12 @@
+FROM redpandadata/redpanda:latest
+# Switch to root to install netcat (Redpanda container uses Debian)
+USER root
+RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/lists/*
+# Create a startup script
+RUN echo '#!/bin/sh' > /entrypoint.sh && \
+    echo 'redpanda start --smp 1 --memory 350M --reserve-memory 0M --overprovisioned --node-id 0 --kafka-addr 0.0.0.0:9092 &' >> /entrypoint.sh && \
+    echo 'echo "Redpanda started on 9092. Starting fake HTTP server on port $PORT..."' >> /entrypoint.sh && \
+    echo 'while true; do { echo -ne "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"; } | nc -lk -p $PORT; done' >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+EXPOSE 9092
+ENTRYPOINT ["/entrypoint.sh"]
