@@ -29,28 +29,55 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const INSTANCE_ID = uuidv4().split('-')[0];
 const IS_PROD = NODE_ENV === 'production';
 
-// Robust REDIS_URL resolving with automatic fallback
+// Robust REDIS_URL resolving with automatic fallback and HTTPS stripping
 let REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 if (!REDIS_URL || REDIS_URL === '/' || REDIS_URL.trim() === '') {
   console.warn('[Redis] Invalid/empty REDIS_URL. Falling back to Render internal host: redis://google-docs-redis:6379');
   REDIS_URL = 'redis://google-docs-redis:6379';
+} else if (REDIS_URL.startsWith('http://') || REDIS_URL.startsWith('https://')) {
+  try {
+    const urlObj = new URL(REDIS_URL);
+    const serviceName = urlObj.hostname.split('.')[0];
+    console.warn(`[Redis] Detected HTTPS URL. Auto-converting to internal host: redis://${serviceName}:6379`);
+    REDIS_URL = `redis://${serviceName}:6379`;
+  } catch (e) {
+    REDIS_URL = 'redis://google-docs-redis:6379';
+  }
 } else if (!REDIS_URL.startsWith('redis://') && !REDIS_URL.startsWith('rediss://')) {
   REDIS_URL = 'redis://' + REDIS_URL;
 }
 
-// Robust KAFKA_BROKERS resolving (supports KAFKA_BROKERS or KAFKA_BROKER)
+// Robust KAFKA_BROKERS resolving with automatic fallback and HTTPS stripping
 let KAFKA_INPUT = process.env.KAFKA_BROKERS || process.env.KAFKA_BROKER || 'localhost:9092';
 if (!KAFKA_INPUT || KAFKA_INPUT === '/' || KAFKA_INPUT.trim() === '') {
   console.warn('[Kafka] Invalid/empty Kafka address. Falling back to: google-docs-kafka:9092');
   KAFKA_INPUT = 'google-docs-kafka:9092';
+} else if (KAFKA_INPUT.startsWith('http://') || KAFKA_INPUT.startsWith('https://')) {
+  try {
+    const urlObj = new URL(KAFKA_INPUT);
+    const serviceName = urlObj.hostname.split('.')[0];
+    console.warn(`[Kafka] Detected HTTPS URL. Auto-converting to internal host: ${serviceName}:9092`);
+    KAFKA_INPUT = `${serviceName}:9092`;
+  } catch (e) {
+    KAFKA_INPUT = 'google-docs-kafka:9092';
+  }
 }
 const KAFKA_BROKERS = KAFKA_INPUT.split(',');
 
-// Robust MONGO_URI resolving (supports MONGODB_URI or MONGO_URI)
+// Robust MONGO_URI resolving with automatic fallback and HTTPS stripping
 let MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017';
 if (!MONGO_URI || MONGO_URI === '/' || MONGO_URI.trim() === '') {
   console.warn('[Mongo] Invalid/empty MONGODB_URI. Falling back to Render internal host: mongodb://google-docs-mongo:27017');
   MONGO_URI = 'mongodb://google-docs-mongo:27017';
+} else if (MONGO_URI.startsWith('http://') || MONGO_URI.startsWith('https://')) {
+  try {
+    const urlObj = new URL(MONGO_URI);
+    const serviceName = urlObj.hostname.split('.')[0];
+    console.warn(`[Mongo] Detected HTTPS URL. Auto-converting to internal host: mongodb://${serviceName}:27017`);
+    MONGO_URI = `mongodb://${serviceName}:27017`;
+  } catch (e) {
+    MONGO_URI = 'mongodb://google-docs-mongo:27017';
+  }
 } else if (!MONGO_URI.startsWith('mongodb://') && !MONGO_URI.startsWith('mongodb+srv://')) {
   MONGO_URI = 'mongodb://' + MONGO_URI;
 }
