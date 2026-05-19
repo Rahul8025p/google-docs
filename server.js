@@ -53,8 +53,13 @@ const opsProcessedCounter = new promClient.Counter({
 });
 
 // ─── Distributed State Clients ────────────────────────────────────────────────
+console.log(`[Redis] Connecting to: ${REDIS_URL.replace(/:[^:]*@/, ':****@')}`);
 const pubClient = new Redis(REDIS_URL);
 const subClient = new Redis(REDIS_URL);
+
+// Prevent process from crashing on unhandled Redis errors
+pubClient.on('error', (err) => console.error('[Redis Pub] Client Error:', err.message));
+subClient.on('error', (err) => console.error('[Redis Sub] Client Error:', err.message));
 
 const kafka = new Kafka({ clientId: `editor-${INSTANCE_ID}`, brokers: KAFKA_BROKERS });
 const producer = kafka.producer();
@@ -234,7 +239,14 @@ wss.on('connection', async (ws, req) => {
 // ─── Bootstrap ─────────────────────────────────────────────────────────────────
 async function bootstrap() {
   await connectMongo();
-  await producer.connect();
+  
+  try {
+    await producer.connect();
+    console.log('[Kafka] Producer connected successfully.');
+  } catch (err) {
+    console.error('[Kafka] Connection error:', err.message);
+  }
+
   server.listen(PORT, () => {
     console.log(`
 ╔════════════════════════════════════════════════════╗
